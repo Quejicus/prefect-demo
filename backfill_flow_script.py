@@ -22,24 +22,28 @@ def make_bq_destination():
 def run_resource(
     resource_name: str,
     bq_destination: dlt.destinations.bigquery,
-    incremental_date: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
 ):
     import github_pipeline
 
     base_source = github_pipeline.github_source
-    if incremental_date and resource_name == "issues":
-        base_source.issues.apply_hints(
+    if start_date and end_date and resource_name == "forks":
+        base_source.forks.apply_hints(
             incremental=dlt.sources.incremental(
-                "created_at", initial_value=incremental_date
+                "created_at",
+                initial_value=start_date,
+                end_value=end_date,
+                row_order="asc",
             )
         )
 
     selected_source = base_source.with_resources(resource_name)
 
     pipeline = dlt.pipeline(
-        pipeline_name=f"github_incremental_{resource_name}",
+        pipeline_name=f"github_backfill_{resource_name}",
         destination=bq_destination,
-        dataset_name="demo_incremental_github",
+        dataset_name="demo_backfill_github",
         progress="log",
     )
 
@@ -49,14 +53,13 @@ def run_resource(
 
 
 @flow(log_prints=True)
-def main(incremental_date: str | None = None):
+def main(start_date: str | None = None, end_date: str | None = None):
     set_github_pat_env()
     bq_destination = make_bq_destination()
     a = run_resource("repos", bq_destination)
-    b = run_resource("contributors", bq_destination)
-    c = run_resource("releases", bq_destination)
-    d = run_resource("issues", bq_destination, incremental_date)
-    return a, b, c, d
+    b = run_resource("forks", bq_destination, start_date=start_date, end_date=end_date)
+
+    return a, b
 
 
 if __name__ == "__main__":
